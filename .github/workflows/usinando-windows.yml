@@ -43,7 +43,7 @@ jobs:
         run: |
           $out = "PdfCraft-USINANDO"
           New-Item -ItemType Directory -Force $out | Out-Null
-          Copy-Item target/release/pdfcraft.exe $out
+          Copy-Item target/release/pdfcraft.exe "$out/EditorPDF-USINANDO.exe"
           Copy-Item LICENSE-MIT, LICENSE-APACHE, NOTICE, ATTRIBUTION.md $out
           Copy-Item assets/app-icon/LICENSE-document.txt $out
           Copy-Item packaging/usinando/LEIA-ME.txt $out
@@ -53,6 +53,21 @@ jobs:
         with:
           name: PdfCraft-USINANDO-windows-x64
           path: PdfCraft-USINANDO
+          retention-days: 30
+
+      - name: Installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y | Out-Null }
+          $versao = (Select-String -Path Cargo.toml -Pattern '^version = "([0-9.]+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
+          & $iscc "/DAppVersion=$versao.${{ github.run_number }}" packaging/usinando/instalador.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Instalador-Editor-PDF-USINANDO
+          path: dist/Instalar-Editor-PDF-USINANDO.exe
           retention-days: 30
 
   tests:

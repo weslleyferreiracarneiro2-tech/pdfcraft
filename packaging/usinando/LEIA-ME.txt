@@ -1,20 +1,23 @@
-PdfCraft — versão USINANDO
-==========================
+﻿Editor de PDF USINANDO
+======================
 
-Leitor e editor de PDF gratuito (PdfCraft, da equipe ArtCraft), com uma função
-a mais feita pra USINANDO: IMPRIMIR SÓ UM PEDAÇO DA PÁGINA.
+Leitor e editor de PDF gratuito, baseado no PdfCraft (equipe ArtCraft), com uma
+função a mais feita pra USINANDO: IMPRIMIR SÓ UM PEDAÇO DA PÁGINA.
 
 COMO INSTALAR (em cada PC)
 --------------------------
-1. Copie esta pasta inteira para C:\Programas\PdfCraft-USINANDO
-   (ou outra pasta fixa; não rode de dentro do zip).
-2. Clique com o botão direito em pdfcraft.exe > Mostrar mais opções >
-   Enviar para > Área de trabalho (criar atalho).
-3. Na primeira vez o Windows pode mostrar um aviso azul ("O Windows protegeu
-   o computador"), porque o programa não tem assinatura digital.
-   Clique em "Mais informações" e depois em "Executar assim mesmo".
-4. (Opcional) Pra abrir todo PDF nele: botão direito num PDF > Abrir com >
-   Escolher outro aplicativo > Procurar > pdfcraft.exe > Sempre.
+1. Dê dois cliques em "Instalar-Editor-PDF-USINANDO.exe".
+2. Se aparecer um aviso azul ("O Windows protegeu o computador"), é porque o
+   programa não tem assinatura digital: clique em "Mais informações" e depois
+   em "Executar assim mesmo".
+3. Confirme a senha de administrador, se o Windows pedir, e vá clicando em
+   "Avançar" até "Concluir". O atalho fica na Área de Trabalho e no Iniciar.
+4. Pra abrir todo PDF nele: no fim da instalação, marque "Escolher o Editor de
+   PDF USINANDO como programa padrão", ou depois: botão direito num PDF >
+   Abrir com > Escolher outro aplicativo > Editor de PDF USINANDO > Sempre.
+
+Pra atualizar, é só rodar o instalador novo por cima. Pra remover:
+Configurações > Aplicativos > Editor de PDF USINANDO > Desinstalar.
 
 COMO IMPRIMIR SÓ UM PEDAÇO
 --------------------------
@@ -24,26 +27,25 @@ COMO IMPRIMIR SÓ UM PEDAÇO
    O pedaço fica marcado em azul.
 4. Clique com o BOTÃO DIREITO em cima do pedaço marcado >
    "Imprimir área selecionada…".
-5. Abre a janela de impressão já com "Área selecionada" marcada.
+5. Abre a janela de impressão já com "Área selecionada" marcada (papel A4).
    Escolha a impressora e clique em Imprimir.
    - "Ajustar" (padrão): o pedaço aumenta pra ocupar a folha.
    - "Tamanho real": o pedaço sai no tamanho de verdade (bom pra medir em escala).
 
-Nesta versão a captura NÃO copia sozinha pra área de transferência.
-Se quiser copiar, use o mesmo botão direito > "Copiar área selecionada".
-Pra voltar ao jeito original (copiar na hora): Editar > Preferências… >
-marque "Capturar instantâneo copia a área na hora".
+A captura NÃO copia sozinha pra área de transferência. Se quiser copiar, use o
+mesmo botão direito > "Copiar área selecionada". Pra voltar ao jeito original
+(copiar na hora): Editar > Preferências… > marque "Capturar instantâneo copia a
+área na hora".
 
 IMPORTANTE
 ----------
 - Não atualize pelo "Ajuda > Verificar atualizações…": a versão oficial do
-  site não tem a função de imprimir o pedaço. Atualização desta versão vem
+  PdfCraft não tem a função de imprimir o pedaço. Atualização desta versão vem
   da USINANDO.
 - O reconhecimento de texto (OCR) não vem nesta versão.
 
 LICENÇA
 -------
 O PdfCraft é software livre (licenças MIT ou Apache-2.0; veja LICENSE-MIT,
-LICENSE-APACHE e NOTICE). Esta é uma versão modificada pela USINANDO e não é
-um produto oficial da ArtCraft; por isso ela não traz os logos da ArtCraft.
-O arquivo versao.txt diz de qual código esta cópia foi compilada.
+LICENSE-APACHE e NOTICE na pasta do programa). O Editor de PDF USINANDO é uma
+versão modificada pela USINANDO e não é um produto oficial da ArtCraft.

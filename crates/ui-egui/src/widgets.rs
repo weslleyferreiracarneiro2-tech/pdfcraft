@@ -500,6 +500,30 @@ pub fn progress_notice(app: &PdfCraftApp, ctx: &egui::Context) -> bool {
 }
 
 
+/// USINANDO build: the company's logo, `height` points tall. The UI has no PNG image loader, so
+/// the logo is kept as raw RGBA pixels (packaging/usinando/logo-usinando.rgba, 556 × 123, made from
+/// logo-usinando.png) and turned into a texture once.
+pub fn usinando_logo(ui: &mut egui::Ui, height: f32) -> Option<Response> {
+    const SIZE: [usize; 2] = [556, 123];
+    let id = egui::Id::new("usinando-logo");
+    let texture = match ui.ctx().data(|d| d.get_temp::<egui::TextureHandle>(id)) {
+        Some(t) => t,
+        None => {
+            let rgba: &[u8] = include_bytes!("../../../packaging/usinando/logo-usinando.rgba");
+            if rgba.len() != SIZE[0] * SIZE[1] * 4 {
+                return None;
+            }
+            let image = egui::ColorImage::from_rgba_unmultiplied(SIZE, rgba);
+            let t = ui.ctx().load_texture("usinando-logo", image, egui::TextureOptions::LINEAR);
+            ui.ctx().data_mut(|d| d.insert_temp(id, t.clone()));
+            t
+        }
+    };
+    let s = texture.size_vec2();
+    let width = if s.y > 0.0 { s.x * height / s.y } else { height };
+    Some(ui.add(egui::Image::new(&texture).fit_to_exact_size(vec2(width, height)).alt_text("USINANDO")))
+}
+
 /// Buttons for every community link (`pdfcraft_engine::links`), Discord first and prominent.
 /// Returns the registry command of the one clicked.
 pub fn community_links(ui: &mut egui::Ui) -> Option<&'static str> {
