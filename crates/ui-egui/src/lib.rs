@@ -2079,7 +2079,7 @@ impl PdfCraftApp {
     /// Serialize the user's persistent state (recent files, theme). Local only.
     pub fn persist(&self) -> String {
         let trusted: Vec<String> = self.session.trusted_certificates().iter().map(pdfcraft_engine::sign::x509::to_pem).collect();
-        serde_json::json!({
+        let mut state = serde_json::json!({
             "docking": self.docking,
             "docking_left_open": self.left_open,
             "docking_right": self.right,
@@ -2088,7 +2088,6 @@ impl PdfCraftApp {
             // Kept only while the preference is on.
             "last_session": self.reopen_last_session.then(|| self.session_to_save()),
             "reload_changed_files": self.reload_changed_files,
-            "snapshot_copies": self.snapshot_copies,
             "system_title_bar": self.system_title_bar,
             "pinned_folders": self.pinned.folders,
             "theme": self.theme_preference,
@@ -2139,8 +2138,10 @@ impl PdfCraftApp {
             "combine_zoom": self.combine_zoom,
             "comments_panel_closed": self.comments_panel_closed,
             "right_panel_closed": self.right_panel_closed,
-        })
-        .to_string()
+        });
+        // Set apart: one more entry would take the literal above past `json!`'s recursion limit.
+        state["snapshot_copies"] = serde_json::Value::Bool(self.snapshot_copies);
+        state.to_string()
     }
 
     /// Restore state written by `persist`. Unknown or malformed data is ignored.
