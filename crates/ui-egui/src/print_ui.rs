@@ -117,7 +117,8 @@ impl Default for PrintDraft {
             cut_marks: true,
             orientation: Orientation::Auto,
             content: Content::DocumentAndMarkups,
-            paper: 0,
+            // USINANDO: A4, the paper in Brazil's printers (PAPERS starts with US Letter).
+            paper: PAPERS.iter().position(|(name, _)| *name == "A4").unwrap_or(0),
             sheet: 0,
             current_page: 0,
             driver_options: None,
