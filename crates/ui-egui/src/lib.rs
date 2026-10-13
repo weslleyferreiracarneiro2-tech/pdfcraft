@@ -911,7 +911,8 @@ impl PdfCraftApp {
             last_session: Default::default(),
             quit_session: None,
             reload_changed_files: true,
-            snapshot_copies: true,
+            // USINANDO: the snapshot only selects; its menu prints or copies.
+            snapshot_copies: false,
             #[cfg(not(target_arch = "wasm32"))]
             watch: Default::default(),
             #[cfg(not(target_arch = "wasm32"))]

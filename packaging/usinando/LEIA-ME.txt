@@ -1,0 +1,49 @@
+PdfCraft — versão USINANDO
+==========================
+
+Leitor e editor de PDF gratuito (PdfCraft, da equipe ArtCraft), com uma função
+a mais feita pra USINANDO: IMPRIMIR SÓ UM PEDAÇO DA PÁGINA.
+
+COMO INSTALAR (em cada PC)
+--------------------------
+1. Copie esta pasta inteira para C:\Programas\PdfCraft-USINANDO
+   (ou outra pasta fixa; não rode de dentro do zip).
+2. Clique com o botão direito em pdfcraft.exe > Mostrar mais opções >
+   Enviar para > Área de trabalho (criar atalho).
+3. Na primeira vez o Windows pode mostrar um aviso azul ("O Windows protegeu
+   o computador"), porque o programa não tem assinatura digital.
+   Clique em "Mais informações" e depois em "Executar assim mesmo".
+4. (Opcional) Pra abrir todo PDF nele: botão direito num PDF > Abrir com >
+   Escolher outro aplicativo > Procurar > pdfcraft.exe > Sempre.
+
+COMO IMPRIMIR SÓ UM PEDAÇO
+--------------------------
+1. Abra o PDF.
+2. Menu Editar > Capturar instantâneo.
+3. Arraste o mouse em volta do pedaço que quer imprimir.
+   O pedaço fica marcado em azul.
+4. Clique com o BOTÃO DIREITO em cima do pedaço marcado >
+   "Imprimir área selecionada…".
+5. Abre a janela de impressão já com "Área selecionada" marcada.
+   Escolha a impressora e clique em Imprimir.
+   - "Ajustar" (padrão): o pedaço aumenta pra ocupar a folha.
+   - "Tamanho real": o pedaço sai no tamanho de verdade (bom pra medir em escala).
+
+Nesta versão a captura NÃO copia sozinha pra área de transferência.
+Se quiser copiar, use o mesmo botão direito > "Copiar área selecionada".
+Pra voltar ao jeito original (copiar na hora): Editar > Preferências… >
+marque "Capturar instantâneo copia a área na hora".
+
+IMPORTANTE
+----------
+- Não atualize pelo "Ajuda > Verificar atualizações…": a versão oficial do
+  site não tem a função de imprimir o pedaço. Atualização desta versão vem
+  da USINANDO.
+- O reconhecimento de texto (OCR) não vem nesta versão.
+
+LICENÇA
+-------
+O PdfCraft é software livre (licenças MIT ou Apache-2.0; veja LICENSE-MIT,
+LICENSE-APACHE e NOTICE). Esta é uma versão modificada pela USINANDO e não é
+um produto oficial da ArtCraft; por isso ela não traz os logos da ArtCraft.
+O arquivo versao.txt diz de qual código esta cópia foi compilada.
