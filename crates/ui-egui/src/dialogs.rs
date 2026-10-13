@@ -1120,10 +1120,6 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                             )
                             .color(t.text_muted),
                         );
-                        ui.add_space(6.0);
-                        if let Some(cmd) = widgets::community_links(ui) {
-                            link_command = Some(cmd);
-                        }
                     }
                 }
             }
