@@ -1,5 +1,6 @@
 //! The Print dialog (Acrobat's File ▸ Print, execution plan M10.5): printer, copies, grayscale;
-//! pages to print (all, current, range with labels, the selected pages; odd/even, reverse); page sizing & handling
+//! pages to print (all, current, range with labels, the selected pages, the Snapshot rectangle;
+//! odd/even, reverse); page sizing & handling
 //! (Size, Poster, Multiple, Booklet); orientation; comments & forms; and a live preview of the
 //! sheets. Printing sends the print-ready PDF to the system spooler; "Save as PDF" writes it.
 
@@ -22,6 +23,8 @@ pub enum Which {
     Range,
     /// The pages picked in the Pages panel or the organize grid when the dialog opened.
     Selected,
+    /// The Snapshot tool's rectangle (Acrobat's "Selected graphic"), laid out as a page.
+    Area,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -51,6 +54,8 @@ pub struct PrintDraft {
     pub range: String,
     /// The pages `Which::Selected` prints (0-based, in page order); empty when none were picked.
     pub selected: Vec<usize>,
+    /// What `Which::Area` prints: the Snapshot rectangle when the dialog opened, if there was one.
+    pub area: Option<print::Area>,
     pub subset: Subset,
     pub reverse: bool,
     pub handling: Handling,
@@ -95,6 +100,7 @@ impl Default for PrintDraft {
             which: Which::All,
             range: String::new(),
             selected: Vec::new(),
+            area: None,
             subset: Subset::All,
             reverse: false,
             handling: Handling::Size,
@@ -129,15 +135,20 @@ impl PrintDraft {
             return Err("Cut and stack needs Two-sided: Off. Print single-sided sheets.".into());
         }
         let range = match self.which {
-            Which::All | Which::Selected | Which::Current => None,
+            Which::All | Which::Selected | Which::Current | Which::Area => None,
             Which::Range => Some(self.range.clone()),
+        };
+        let area = match self.which {
+            Which::Area => Some(self.area.ok_or(print::PrintError::NoPages).map_err(|e| e.said(&crate::i18n::words))?),
+            _ => None,
         };
         // Selected and Current are positions, not a typed range: a range would read numbers as
         // page labels first.
-        let pages = match self.which {
-            Which::Selected => print::select_listed(count, &self.selected, self.subset, self.reverse),
-            Which::Current => print::select_listed(count, &[self.current_page], self.subset, self.reverse),
-            Which::All | Which::Range => print::select_pages(count, range.as_deref(), labels, self.subset, self.reverse),
+        let pages = match (self.which, area) {
+            (Which::Area, Some(area)) => print::select_listed(count, &[area.page], Subset::All, false),
+            (Which::Selected, _) => print::select_listed(count, &self.selected, self.subset, self.reverse),
+            (Which::Current, _) => print::select_listed(count, &[self.current_page], self.subset, self.reverse),
+            _ => print::select_pages(count, range.as_deref(), labels, self.subset, self.reverse),
         }
         // What the person got wrong about what to print is said in their language: the engine hands
         // the wording over whole and the page numbers apart from it.
@@ -156,7 +167,14 @@ impl PrintDraft {
             Handling::Booklet => Layout::Booklet { subset: self.booklet_subset, binding: self.binding },
             Handling::Poster => Layout::Poster { scale: self.poster_scale, overlap: self.overlap, cut_marks: self.cut_marks },
         };
-        Ok(print::Settings { pages, paper: PAPERS[self.paper.min(PAPERS.len() - 1)].1, orientation: self.orientation, layout, content: self.content })
+        Ok(print::Settings {
+            pages,
+            paper: PAPERS[self.paper.min(PAPERS.len() - 1)].1,
+            orientation: self.orientation,
+            layout,
+            content: self.content,
+            area,
+        })
     }
 
     pub fn job(&self, title: &str) -> spool::Job {
@@ -245,12 +263,18 @@ impl PdfCraftApp {
         let default = default_printer(&printers);
         let current = self.views[i].current;
         let selected: Vec<usize> = self.views[i].selected.iter().copied().collect();
+        // The Snapshot rectangle, from view space (y down) to the page's display space (y up).
+        let area = self.views[i].snapshot_area.and_then(|(page, r)| {
+            let height = self.session.get(self.views[i].id)?.info.pages.get(page)?.height;
+            Some(print::Area { page, rect: [r[0], height - r[3], r[2], height - r[1]].map(f64::from) })
+        });
         let keep = std::mem::take(&mut self.print_draft);
         // Picked pages are what Print is for (Acrobat's "Selected pages"); without any, a choice
-        // left over from another document falls back to the whole document.
+        // left over from another document falls back to the whole document. Only the
+        // rectangle's own Print… starts on the rectangle ([`Self::open_print_area`]).
         let which = match (selected.is_empty(), keep.which) {
             (false, _) => Which::Selected,
-            (true, Which::Selected) => Which::All,
+            (true, Which::Selected | Which::Area) => Which::All,
             (true, other) => other,
         };
         self.print_draft = PrintDraft {
@@ -262,10 +286,19 @@ impl PdfCraftApp {
             current_page: current,
             sheet: 0,
             selected,
+            area,
             which,
             ..keep
         };
         self.dialog = Some(crate::Dialog::Print);
+    }
+
+    /// Print… from the Snapshot rectangle's menu: the dialog, set to print just that area.
+    pub fn open_print_area(&mut self) {
+        self.open_print();
+        if matches!(self.dialog, Some(crate::Dialog::Print)) && self.print_draft.area.is_some() {
+            self.print_draft.which = Which::Area;
+        }
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -788,6 +821,11 @@ pub(crate) fn body(
             if !d.selected.is_empty() {
                 let label = format!("{} ({})", tl!("Selected pages"), d.selected.len());
                 widgets::radio_value(ui, &mut d.which, Which::Selected, label);
+            }
+            // Offered only when a Snapshot rectangle was selected before the dialog opened.
+            if let Some(area) = d.area {
+                let label = format!("{} ({} {})", tl!("Selected area"), tl!("Page"), area.page.saturating_add(1));
+                widgets::radio_value(ui, &mut d.which, Which::Area, label);
             }
             ui.horizontal(|ui| {
                 ui.label(tl!("More options:"));

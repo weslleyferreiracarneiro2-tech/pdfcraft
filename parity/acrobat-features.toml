@@ -1550,8 +1550,8 @@ milestone = "M3"
 status = "shipped"
 commands = ["edit.snapshot"]
 tools = ["page_render"]
-evidence = ["crates/ui-egui/tests/viewer.rs::marquee_zoom_and_snapshot"]
-notes = "copies the area at the current zoom to the clipboard as an image"
+evidence = ["crates/ui-egui/tests/viewer.rs::marquee_zoom_and_snapshot", "crates/ui-egui/tests/viewer.rs::the_snapshot_rectangle_prints_or_copies_from_its_menu"]
+notes = "copies the area at the current zoom to the clipboard as an image (unless Preferences turn that off); the rectangle stays selected, and its menu prints just that area (print.selected-graphic) or copies it"
 
 [[feature]]
 id = "view.copy-image"
@@ -7950,6 +7950,18 @@ commands = ["print.dialog"]
 tools = ["doc_print"]
 evidence = ["crates/print/src/tests.rs::page_selection", "crates/automation/tests/automation.rs::printing_through_tools"]
 notes = "all, current, ranges with labels and open ends"
+
+[[feature]]
+id = "print.selected-graphic"
+title = "Print the Snapshot rectangle (selected graphic)"
+area = "L"
+tier = "P2"
+milestone = "M10"
+status = "shipped"
+commands = ["edit.snapshot", "print.dialog"]
+tools = ["doc_print"]
+evidence = ["crates/print/src/tests.rs::a_selected_area_prints_as_a_page_of_its_own_size", "crates/print/src/tests.rs::a_selected_area_works_with_every_layout", "crates/print/src/tests.rs::the_imposed_area_is_clipped_to_the_selection", "crates/ui-egui/tests/viewer.rs::the_snapshot_rectangle_prints_or_copies_from_its_menu", "crates/automation/tests/automation.rs::printing_through_tools"]
+notes = "the Snapshot rectangle stays selected while the tool is on; right-click it ▸ Print selected area… opens Print on Selected area, laid out as if it were the page (every sizing and handling mode); the area is clipped from the page as vectors, not copied as a picture. doc_print takes area {page, rect}. Preferences can stop Take a snapshot copying at once"
 
 [[feature]]
 id = "print.odd-even-reverse"

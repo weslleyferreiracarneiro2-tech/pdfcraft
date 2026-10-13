@@ -643,3 +643,90 @@ fn paper_matching_accepts_rounded_metric_sizes_but_not_custom_or_invalid_sizes()
         assert_eq!(matching_paper(size), None);
     }
 }
+
+fn area(page: usize, rect: [f64; 4], layout: Layout) -> Settings {
+    Settings { area: Some(Area { page, rect }), ..settings(vec![0], layout) }
+}
+
+#[test]
+fn a_selected_area_prints_as_a_page_of_its_own_size() {
+    let sizes = [(200.0, 300.0), (200.0, 300.0)];
+    // 100 × 50 on page 2: wider than tall, so Auto turns the sheet; `pages` ([0]) is ignored.
+    let fit = layout(&sizes, &area(1, [50.0, 100.0, 150.0, 150.0], Layout::Size(SizeMode::Fit))).unwrap();
+    assert_eq!(fit.len(), 1);
+    assert_eq!(fit[0].size, (792.0, 612.0));
+    let pl = fit[0].placed[0];
+    assert_eq!(pl.page, 1);
+    assert_eq!(pl.clip, [50.0, 100.0, 150.0, 150.0], "only the area shows");
+    // min(756 / 100, 576 / 50) = 7.56, centred on the sheet.
+    let (x0, y0) = pl.matrix.apply(50.0, 100.0);
+    let (x1, y1) = pl.matrix.apply(150.0, 150.0);
+    assert!(close(x0, 18.0) && close(x1, 774.0), "{x0} {x1}");
+    assert!(close(y0, 117.0) && close(y1, 495.0), "{y0} {y1}");
+    // At 100% the area keeps its size, centred.
+    let actual = layout(&sizes, &area(1, [50.0, 100.0, 150.0, 150.0], Layout::Size(SizeMode::Actual))).unwrap();
+    let pl = actual[0].placed[0];
+    assert_eq!(pl.matrix.apply(50.0, 100.0), (346.0, 281.0));
+    assert_eq!(pl.matrix.apply(150.0, 150.0), (446.0, 331.0));
+    // Corners in either order, and a rectangle running off the page, are the same area.
+    let flipped = layout(&sizes, &area(1, [150.0, 150.0, 50.0, 100.0], Layout::Size(SizeMode::Fit))).unwrap();
+    assert_eq!(flipped, fit);
+    let off = layout(&sizes, &area(0, [-50.0, -50.0, 100.0, 100.0], Layout::Size(SizeMode::Fit))).unwrap();
+    assert_eq!(off[0].placed[0].clip, [0.0, 0.0, 100.0, 100.0]);
+}
+
+#[test]
+fn a_selected_area_works_with_every_layout() {
+    let sizes = [(200.0, 300.0)];
+    let w = [50.0, 100.0, 150.0, 150.0];
+    let inside = |c: [f64; 4]| c[0] >= w[0] && c[1] >= w[1] && c[2] <= w[2] && c[3] <= w[3] && c[0] < c[2] && c[1] < c[3];
+    let poster = layout(&sizes, &area(0, w, Layout::Poster { scale: 1000.0, overlap: 18.0, cut_marks: true })).unwrap();
+    // 1000 × 500 on landscape Letter tiles (756 × 576): 2 × 1.
+    assert_eq!(poster.len(), 2);
+    assert!(poster.iter().all(|s| inside(s.placed[0].clip)), "{poster:?}");
+    let multiple = Layout::Multiple { cols: 2, rows: 2, per_sheet: 4, order: PageOrder::Horizontal, border: true, auto_rotate: true };
+    let grid = layout(&sizes, &area(0, w, multiple)).unwrap();
+    assert_eq!(sheet_pages(&grid), [vec![0]]);
+    assert_eq!(grid[0].placed[0].clip, w);
+    assert_eq!(grid[0].borders[0], grid[0].placed[0].matrix.bbox(w), "the border frames the area");
+    let booklet = layout(&sizes, &area(0, w, Layout::Booklet { subset: BookletSubset::BothSides, binding: Binding::Left })).unwrap();
+    assert!(booklet.iter().flat_map(|s| &s.placed).all(|p| p.clip == w));
+}
+
+#[test]
+fn an_empty_or_misplaced_area_is_refused_without_panicking() {
+    let sizes = [(200.0, 300.0), (200.0, 300.0)];
+    let empty = Err(PrintError::Invalid("the selected area is empty".into()));
+    for rect in [
+        [300.0, 400.0, 350.0, 450.0],
+        [10.0, 10.0, 10.5, 50.0],
+        [f64::NAN, 0.0, 10.0, 10.0],
+        [0.0, 0.0, f64::INFINITY, 10.0],
+        [f64::MAX, f64::MIN, f64::MIN, f64::MAX],
+    ] {
+        let got = layout(&sizes, &area(0, rect, Layout::Size(SizeMode::Fit)));
+        if rect == [f64::MAX, f64::MIN, f64::MIN, f64::MAX] {
+            // Clamped to the page: the whole page.
+            assert_eq!(got.unwrap()[0].placed[0].clip, [0.0, 0.0, 200.0, 300.0]);
+        } else {
+            assert_eq!(got, empty, "{rect:?}");
+        }
+    }
+    assert_eq!(layout(&sizes, &area(2, [0.0, 0.0, 10.0, 10.0], Layout::Size(SizeMode::Fit))), Err(PrintError::OutOfRange(3, 2)));
+    assert_eq!(layout(&sizes, &area(usize::MAX, [0.0, 0.0, 10.0, 10.0], Layout::Size(SizeMode::Fit))), Err(PrintError::OutOfRange(usize::MAX, 2)));
+    assert!(impose(&fixture(1), &area(0, [f64::NAN; 4], Layout::Size(SizeMode::Fit))).is_err());
+}
+
+#[test]
+fn the_imposed_area_is_clipped_to_the_selection() {
+    // Page 1's printable square comment sits at [10 10 50 50]: print just that corner.
+    let out = impose(&fixture(2), &area(0, [10.0, 10.0, 50.0, 50.0], Layout::Size(SizeMode::Fit))).unwrap();
+    let printed = Document::open(Arc::new(out)).unwrap();
+    let pages = pdfcraft_model::pages(&printed);
+    assert_eq!(pages.len(), 1);
+    assert_eq!(pages[0].crop(&printed), [0.0, 0.0, 612.0, 792.0]);
+    let sheet = String::from_utf8_lossy(&decoded_contents(&printed, &pages[0].dict)).into_owned();
+    assert!(sheet.contains(" 10 10 40 40 re W n "), "clipped to the area: {sheet}");
+    // 40 pt fit to 576 pt wide: 14.4×.
+    assert!(sheet.starts_with("q 14.4 0 0 14.4 "), "{sheet}");
+}

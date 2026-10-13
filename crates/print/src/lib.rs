@@ -219,6 +219,30 @@ pub enum Content {
     FormFieldsOnly,
 }
 
+/// A part of one page to print instead of whole pages (Acrobat's "Selected graphic": the
+/// Snapshot tool's rectangle).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Area {
+    /// The source page (0-based).
+    pub page: usize,
+    /// `[x0, y0, x1, y1]` in the page's display space (points, origin at the bottom-left of the
+    /// page as shown, y up, after `/Rotate`); either corner may come first.
+    pub rect: [f64; 4],
+}
+
+impl Area {
+    /// The rectangle within a page of display size `(dw, dh)`, ordered, or `None` when less than a
+    /// point of it is on the page.
+    pub fn window(&self, (dw, dh): (f64, f64)) -> Option<[f64; 4]> {
+        let [a, b, c, d] = self.rect;
+        if !self.rect.iter().all(|v| v.is_finite()) || !(dw.is_finite() && dh.is_finite()) {
+            return None;
+        }
+        let w = [a.min(c).max(0.0), b.min(d).max(0.0), a.max(c).min(dw), b.max(d).min(dh)];
+        (w[2] - w[0] >= 1.0 && w[3] - w[1] >= 1.0).then_some(w)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
     /// Source pages (0-based) in print order; see [`select_pages`].
@@ -228,11 +252,21 @@ pub struct Settings {
     pub orientation: Orientation,
     pub layout: Layout,
     pub content: Content,
+    /// Print only this part of one page, laid out as if it were the whole page; `pages` is
+    /// ignored.
+    pub area: Option<Area>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { pages: Vec::new(), paper: PAPERS[0].1, orientation: Orientation::Auto, layout: Layout::default(), content: Content::default() }
+        Settings {
+            pages: Vec::new(),
+            paper: PAPERS[0].1,
+            orientation: Orientation::Auto,
+            layout: Layout::default(),
+            content: Content::default(),
+            area: None,
+        }
     }
 }
 
@@ -319,12 +353,42 @@ fn fit_scale((dw, dh): (f64, f64), (cw, ch): (f64, f64)) -> f64 {
     if dw <= 0.0 || dh <= 0.0 { 1.0 } else { (cw / dw).min(ch / dh) }
 }
 
+/// `pl` places a window of the page as if the window's corner were the page's origin: move it to
+/// where the window `w` really is, and clip to it.
+fn at_window(pl: Placement, w: [f64; 4]) -> Placement {
+    let [x0, y0, x1, y1] = pl.clip;
+    Placement {
+        page: pl.page,
+        matrix: Matrix::translate(-w[0], -w[1]).then(&pl.matrix),
+        clip: [(x0 + w[0]).max(w[0]), (y0 + w[1]).max(w[1]), (x1 + w[0]).min(w[2]), (y1 + w[1]).min(w[3])],
+    }
+}
+
 /// Lay out the sheets for `settings` given each source page's display size.
 pub fn layout(sizes: &[(f64, f64)], settings: &Settings) -> Result<Vec<Sheet>, PrintError> {
-    let pages: Vec<usize> = settings.pages.iter().copied().filter(|p| *p < sizes.len()).collect();
+    // A selected area prints in place of its page, as a page of the area's size.
+    let mut window = None;
+    let mut sizes = std::borrow::Cow::Borrowed(sizes);
+    let pages: Vec<usize> = match settings.area {
+        Some(area) => {
+            let size = sizes.get(area.page).copied().ok_or(PrintError::OutOfRange(area.page.saturating_add(1), sizes.len()))?;
+            let w = area.window(size).ok_or_else(|| PrintError::Invalid("the selected area is empty".into()))?;
+            if let Some(s) = sizes.to_mut().get_mut(area.page) {
+                *s = (w[2] - w[0], w[3] - w[1]);
+            }
+            window = Some(w);
+            vec![area.page]
+        }
+        // Every page kept is within `sizes`, so the branches below may index it.
+        None => settings.pages.iter().copied().filter(|p| *p < sizes.len()).collect(),
+    };
     if pages.is_empty() {
         return Err(PrintError::NoPages);
     }
+    let place = |pl: Placement| match window {
+        Some(w) => at_window(pl, w),
+        None => pl,
+    };
     let paper = settings.paper;
     if !(paper.0 >= 72.0 && paper.1 >= 72.0 && paper.0.is_finite() && paper.1.is_finite()) {
         return Err(PrintError::Invalid("invalid paper size".into()));
@@ -343,7 +407,7 @@ pub fn layout(sizes: &[(f64, f64)], settings: &Settings) -> Result<Vec<Sheet>, P
                     SizeMode::Custom(pct) if pct.is_finite() && pct > 0.0 => pct / 100.0,
                     SizeMode::Custom(_) => return Err(PrintError::Invalid("the scale must be more than 0%".into())),
                 };
-                sheets.push(Sheet { size, placed: vec![place_in(p, d, [0.0, 0.0, size.0, size.1], s, false)], ..Sheet::default() });
+                sheets.push(Sheet { size, placed: vec![place(place_in(p, d, [0.0, 0.0, size.0, size.1], s, false))], ..Sheet::default() });
             }
         }
         Layout::Multiple { cols, rows, per_sheet, order, border, auto_rotate } => {
@@ -417,7 +481,7 @@ pub fn layout(sizes: &[(f64, f64)], settings: &Settings) -> Result<Vec<Sheet>, P
                     if !s.is_finite() || s <= 0.0 {
                         return Err(PrintError::Invalid("page size cannot be scaled to the grid".into()));
                     }
-                    let pl = place_in(p, d, cell, s, rotate);
+                    let pl = place(place_in(p, d, cell, s, rotate));
                     if border {
                         let b = pl.matrix.bbox(pl.clip);
                         sheet.borders.push(b);
@@ -451,7 +515,7 @@ pub fn layout(sizes: &[(f64, f64)], settings: &Settings) -> Result<Vec<Sheet>, P
                         if let Some(p) = p {
                             let d = sizes[p];
                             let s = fit_scale(d, (cell[2] - cell[0], cell[3] - cell[1]));
-                            sheet.placed.push(place_in(p, d, cell, s, false));
+                            sheet.placed.push(place(place_in(p, d, cell, s, false)));
                         }
                     }
                     sheets.push(sheet);
@@ -487,7 +551,7 @@ pub fn layout(sizes: &[(f64, f64)], settings: &Settings) -> Result<Vec<Sheet>, P
                         let wy1 = sh - ty as f64 * stepy;
                         let matrix = Matrix([s, 0.0, 0.0, s, MARGIN - wx0, size.1 - MARGIN - wy1]);
                         let clip = [wx0 / s, (wy1 - th) / s, (wx0 + tw) / s, wy1 / s];
-                        let mut sheet = Sheet { size, placed: vec![Placement { page: p, matrix, clip }], ..Sheet::default() };
+                        let mut sheet = Sheet { size, placed: vec![place(Placement { page: p, matrix, clip })], ..Sheet::default() };
                         if cut_marks {
                             let (x0, y0, x1, y1) = (MARGIN, MARGIN, size.0 - MARGIN, size.1 - MARGIN);
                             for (x, y) in [(x0, y0), (x1, y0), (x0, y1), (x1, y1)] {

@@ -436,6 +436,13 @@ pub struct DocView {
     /// Marquee Zoom / Snapshot: the rectangle being dragged (page, start), and a finished one.
     pub marquee: Option<(usize, Pos2)>,
     pub marquee_done: Option<crate::zoom_snap::Marquee>,
+    /// Snapshot: the rectangle taken last (page, view space [x0, y0, x1, y1]). It stays selected
+    /// while the tool is on, and right-clicking it offers Print and Copy.
+    pub snapshot_area: Option<(usize, [f32; 4])>,
+    /// The last right-click landed on `snapshot_area`, so the page menu is the snapshot's.
+    pub(crate) snapshot_menu: bool,
+    /// What the snapshot's menu asked for, done once the canvas lets go of the view.
+    pub(crate) snapshot_action: Option<crate::zoom_snap::SnapshotAction>,
     /// Fill & Sign text being typed.
     pub fill_text: Option<crate::fill_sign::TypeBox>,
     /// A queued Fill & Sign signature: select it after its edit succeeds, then leave placement.
@@ -674,6 +681,9 @@ impl DocView {
             panel_drag: None,
             marquee: None,
             marquee_done: None,
+            snapshot_area: None,
+            snapshot_menu: false,
+            snapshot_action: None,
             fill_text: None,
             fill_signature_page: None,
             signature_drag: Default::default(),
@@ -2427,8 +2437,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         let mut current_height = f32::INFINITY;
         let pointer = ui.input(|i| i.pointer.hover_pos());
         if resp.secondary_clicked() {
-            // Set again below when the right-click lands on a link.
+            // Set again below when the right-click lands on a link, or on the Snapshot rectangle.
             view.links.context = None;
+            view.snapshot_menu = false;
         }
         for &i in &visible_pages {
             let r = snap_to_pixels(rects[i].translate(origin.to_vec2()), ppp);
@@ -3042,6 +3053,18 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             }
         }
         resp.context_menu(|ui| {
+            // The Snapshot rectangle's menu: print just that area, or copy it.
+            if view.snapshot_menu && view.snapshot_area.is_some() {
+                if ui.button(tl!("Print selected area…")).clicked() {
+                    view.snapshot_action = Some(crate::zoom_snap::SnapshotAction::Print);
+                    ui.close();
+                }
+                if ui.button(tl!("Copy selected area")).clicked() {
+                    view.snapshot_action = Some(crate::zoom_snap::SnapshotAction::Copy);
+                    ui.close();
+                }
+                return;
+            }
             // Preparing a form: the selected field's menu.
             if preparing && let Some((name, wi)) = view.prepare.selected.clone() {
                 // Several fields: Align, Center, Distribute, Set Fields to Same Size.
@@ -3336,6 +3359,13 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     }
     if let Some(done) = app.views[index].marquee_done.take() {
         app.finish_marquee(index, done);
+    }
+    if let Some(action) = app.views[index].snapshot_action.take() {
+        app.snapshot_action(index, action);
+    }
+    // The Snapshot rectangle goes with its tool.
+    if app.quick_tool != QuickTool::Snapshot {
+        app.views[index].snapshot_area = None;
     }
     // A signature rectangle was drawn, or an empty signature field clicked.
     let drawn = app.views[index].sign.drawn.take();

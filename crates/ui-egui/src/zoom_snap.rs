@@ -1,5 +1,6 @@
 //! View ▸ Zoom ▸ Marquee Zoom (drag a rectangle to fill the window with it; click to zoom in)
-//! and Edit ▸ Take a Snapshot (drag a rectangle to copy that area as an image).
+//! and Edit ▸ Take a Snapshot (drag a rectangle to copy that area as an image; it stays
+//! selected, and right-clicking it offers Print… for just that area, and Copy).
 
 use egui::{Color32, CornerRadius, Pos2, Rect, Stroke};
 use pdfcraft_render::{RenderConfig, RenderRequest, RequestKind, Tile};
@@ -11,12 +12,33 @@ use crate::{PdfCraftApp, QuickTool};
 /// [x0, y0, x1, y1]); a plain click has an empty rectangle.
 pub type Marquee = (usize, Rect, [f32; 4]);
 
+/// What the Snapshot rectangle's menu asks for (Acrobat's Print… and Copy Selected Graphic).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SnapshotAction {
+    Print,
+    Copy,
+}
+
+const SNAPSHOT_BLUE: Color32 = Color32::from_rgb(0x14, 0x73, 0xE6);
+
 /// Drag a rectangle on page `page` (Marquee Zoom, Snapshot).
 pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, xf: &PageXform, page: usize, view: &mut DocView) {
     let pointer = ui.input(|i| i.pointer.hover_pos());
     let origin = ui.input(|i| i.pointer.press_origin());
     if pointer.is_some_and(|p| xf.rect.contains(p)) {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+    }
+    // The snapshot taken last stays selected until another one, a click or another tool.
+    if let Some((p, r)) = view.snapshot_area
+        && p == page
+        && view.marquee.is_none()
+    {
+        let shown = xf.view_rect(r);
+        ui.painter().rect_filled(shown, CornerRadius::ZERO, SNAPSHOT_BLUE.gamma_multiply(0.12));
+        ui.painter().rect_stroke(shown, CornerRadius::ZERO, Stroke::new(1.5, SNAPSHOT_BLUE), egui::StrokeKind::Middle);
+        if resp.secondary_clicked() && pointer.is_some_and(|p| shown.contains(p)) {
+            view.snapshot_menu = true;
+        }
     }
     if resp.drag_started()
         && let Some(o) = origin.filter(|o| xf.rect.contains(*o))
@@ -29,7 +51,7 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, xf: &PageXform, p
     {
         let end = Pos2::new(end.x.clamp(xf.rect.left(), xf.rect.right()), end.y.clamp(xf.rect.top(), xf.rect.bottom()));
         let r = Rect::from_two_pos(start, end);
-        ui.painter().rect_stroke(r, CornerRadius::ZERO, Stroke::new(1.0, Color32::from_rgb(0x14, 0x73, 0xE6)), egui::StrokeKind::Middle);
+        ui.painter().rect_stroke(r, CornerRadius::ZERO, Stroke::new(1.0, SNAPSHOT_BLUE), egui::StrokeKind::Middle);
         if resp.drag_stopped() {
             view.marquee = None;
             let (a, b) = (xf.screen_to_view(r.left_top()), xf.screen_to_view(r.right_bottom()));
@@ -60,21 +82,45 @@ impl PdfCraftApp {
                 }
             }
             QuickTool::Snapshot => {
+                let Some(view) = self.views.get_mut(index) else { return };
                 if view_rect[2] - view_rect[0] < 2.0 || view_rect[3] - view_rect[1] < 2.0 {
+                    // A click lets go of the rectangle.
+                    view.snapshot_area = None;
                     return;
                 }
-                // The tool outlives the tab it was chosen on.
-                if self.views.get(index).map(|v| v.id).is_some_and(|id| !self.may_copy(id)) {
-                    return;
-                }
-                match self.snapshot(index, page, view_rect) {
-                    Ok((w, h)) => {
-                        self.notify_fmt("The selected area has been copied ({w} × {h} pixels)", &[("w", &w.to_string()), ("h", &h.to_string())])
-                    }
-                    Err(e) => self.notify_fmt("Couldn't take the snapshot: {e}", &[("e", &e.to_string())]),
+                view.snapshot_area = Some((page, view_rect));
+                if self.snapshot_copies {
+                    self.copy_snapshot(index, page, view_rect);
+                } else {
+                    self.notify_tr("Area selected. Right-click it to print or copy it.");
                 }
             }
             _ => {}
+        }
+    }
+
+    /// Copy `view_rect` of `page` as an image, if the document allows copying, and say so.
+    fn copy_snapshot(&mut self, index: usize, page: usize, view_rect: [f32; 4]) {
+        // The tool outlives the tab it was chosen on.
+        if self.views.get(index).map(|v| v.id).is_some_and(|id| !self.may_copy(id)) {
+            return;
+        }
+        match self.snapshot(index, page, view_rect) {
+            Ok((w, h)) => self.notify_fmt("The selected area has been copied ({w} × {h} pixels)", &[("w", &w.to_string()), ("h", &h.to_string())]),
+            Err(e) => self.notify_fmt("Couldn't take the snapshot: {e}", &[("e", &e.to_string())]),
+        }
+    }
+
+    /// Do what the Snapshot rectangle's menu asked for, on view `index`'s rectangle.
+    pub(crate) fn snapshot_action(&mut self, index: usize, action: SnapshotAction) {
+        let Some((page, view_rect)) = self.views.get(index).and_then(|v| v.snapshot_area) else { return };
+        match action {
+            SnapshotAction::Copy => self.copy_snapshot(index, page, view_rect),
+            SnapshotAction::Print => {
+                // The menu belongs to the view it was opened on, which Print then prints.
+                self.active = Some(index);
+                self.open_print_area();
+            }
         }
     }
 

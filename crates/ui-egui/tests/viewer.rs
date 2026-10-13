@@ -418,6 +418,71 @@ fn marquee_zoom_and_snapshot() {
     h.run_steps(4);
     let after = h.state().views[i].zoom;
     assert!(after > before * 2.0, "{before} → {after}");
+    assert_eq!(h.state().views[i].snapshot_area, None, "the snapshot rectangle goes with its tool");
+}
+
+fn press(h: &mut Harness<'static, PdfCraftApp>, at: egui::Pos2, button: egui::PointerButton) {
+    h.hover_at(at);
+    h.run_steps(1);
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos: at, button, pressed, modifiers: Default::default() });
+    }
+    h.run_steps(3);
+}
+
+/// Acrobat's Snapshot menu: the rectangle stays selected, and right-clicking it prints just that
+/// area (the Print dialog's Selected area) or copies it.
+#[test]
+fn the_snapshot_rectangle_prints_or_copies_from_its_menu() {
+    let mut h = harness();
+    let i = h.state().active.unwrap();
+    let r = h.state().views[i].page_screen_rect(0).expect("on screen");
+    let at = |x: f32, y: f32| egui::pos2(r.left() + x / 200.0 * r.width(), r.top() + (300.0 - y) / 300.0 * r.height());
+    h.state_mut().system_clipboard = false;
+    // Preferences: Take a snapshot only selects.
+    h.state_mut().snapshot_copies = false;
+    assert!(h.state_mut().execute("edit.snapshot"));
+    drag(&mut h, at(15.0, 175.0), at(180.0, 140.0));
+    assert!(h.state().last_snapshot.is_none(), "nothing copied");
+    let (page, _) = h.state().views[i].snapshot_area.expect("the rectangle stays selected");
+    assert_eq!(page, 0);
+    // Right-click it ▸ Print selected area…: the dialog prints that area of page 1.
+    press(&mut h, at(100.0, 160.0), egui::PointerButton::Secondary);
+    h.get_by_label("Print selected area…").click();
+    h.run_steps(3);
+    assert!(matches!(h.state().dialog, Some(Dialog::Print)));
+    let d = h.state().print_draft.clone();
+    assert_eq!(d.which, pdfcraft_ui_egui::PrintWhich::Area);
+    let area = d.area.expect("the rectangle");
+    // In the page's display space (y up), as drawn: x 15–180, y 140–175, within a point.
+    assert_eq!(area.page, 0);
+    for (got, want) in area.rect.iter().zip([15.0, 140.0, 180.0, 175.0]) {
+        assert!((got - want).abs() < 1.5, "{:?}", area.rect);
+    }
+    let sizes = [(200.0, 300.0); 2];
+    let settings = d.settings(2, &["1".into(), "2".into()]).unwrap();
+    assert_eq!((settings.pages.clone(), settings.area), (vec![0], Some(area)));
+    let sheets = pdfcraft_engine::print::layout(&sizes, &settings).unwrap();
+    assert_eq!(sheets.len(), 1);
+    assert_eq!(sheets[0].placed[0].clip, area.window(sizes[0]).unwrap(), "the sheet shows only the area");
+    // Plain Print… (⌘P) doesn't start on the rectangle; it is offered.
+    h.state_mut().dialog = None;
+    h.state_mut().open_print();
+    assert_eq!(h.state().print_draft.which, pdfcraft_ui_egui::PrintWhich::All);
+    assert_eq!(h.state().print_draft.area, Some(area));
+    h.state_mut().dialog = None;
+    h.run_steps(2);
+    // Copy selected area copies, whatever the preference.
+    press(&mut h, at(100.0, 160.0), egui::PointerButton::Secondary);
+    h.get_by_label("Copy selected area").click();
+    h.run_steps(3);
+    let (w, hgt, _) = h.state().last_snapshot.clone().expect("copied");
+    assert!(w > 50 && hgt > 10, "{w} × {hgt}");
+    // A click lets go of the rectangle; Print… then has none to offer.
+    press(&mut h, at(100.0, 60.0), egui::PointerButton::Primary);
+    assert_eq!(h.state().views[i].snapshot_area, None);
+    h.state_mut().open_print();
+    assert_eq!(h.state().print_draft.area, None);
 }
 
 #[test]

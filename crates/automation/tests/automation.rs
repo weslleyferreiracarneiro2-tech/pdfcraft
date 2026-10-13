@@ -3102,6 +3102,20 @@ fn printing_through_tools() {
     assert!(r["sheets"].as_u64().unwrap() > 1);
     assert!(matches!(a.call("doc_print", &json!({ "doc": doc })), Err(ToolError::InvalidArgs(_))));
     assert!(matches!(a.call("doc_print", &json!({ "doc": doc, "pages": "99", "path": "x.pdf" })), Err(ToolError::InvalidArgs(_))));
+    // Acrobat's Selected graphic: part of one page prints as a sheet of its own.
+    let r = ok(&mut a, "doc_print", json!({ "doc": doc, "area": { "page": 1, "rect": [10, 10, 110, 60] }, "path": "area.pdf" }));
+    assert_eq!((r["sheets"].as_u64(), r["pages"].as_u64()), (Some(1), Some(1)));
+    let printed = ok(&mut a, "doc_open", json!({ "path": "area.pdf" }))["doc"].as_u64().unwrap();
+    assert_eq!(ok(&mut a, "doc_info", json!({ "doc": printed }))["document"]["pages"].as_u64(), Some(1));
+    for (page, rect, pages, says) in [
+        (0, json!([0, 0, 10, 10]), None, "area.page"),
+        (1, json!([0, 0, 10]), None, "area.rect"),
+        (1, json!([-50, -50, -10, -10]), None, "empty"),
+        (1, json!([0, 0, 10, 10]), Some("1"), "leave out pages"),
+    ] {
+        let args = json!({ "doc": doc, "area": { "page": page, "rect": rect }, "pages": pages, "path": "x.pdf" });
+        assert!(matches!(a.call("doc_print", &args), Err(ToolError::InvalidArgs(m)) if m.contains(says)), "{args}");
+    }
 }
 
 #[test]

@@ -41,6 +41,29 @@ impl Automation {
         let doc = self.doc(a)?;
         let (id, count) = (doc.id, doc.info.pages.len());
         let labels: Vec<String> = doc.info.pages.iter().map(|p| p.label.clone()).collect();
+        // Acrobat's "Selected graphic": part of one page, in points from the top-left of the page
+        // as shown (as page_add_text places things), turned into the engine's y-up display space.
+        let area = match a.get("area") {
+            None => None,
+            Some(v) => {
+                if a.get("pages").is_some() {
+                    return Err(bad("area prints part of one page: leave out pages"));
+                }
+                let page = v
+                    .get("page")
+                    .and_then(Value::as_u64)
+                    .and_then(|p| usize::try_from(p).ok())
+                    .filter(|p| (1..=count).contains(p))
+                    .ok_or_else(|| bad(format!("area.page must be a page number from 1 to {count}")))?
+                    - 1;
+                let rect: Vec<f64> = v.get("rect").and_then(Value::as_array).map(|r| r.iter().filter_map(Value::as_f64).collect()).unwrap_or_default();
+                let Ok([x0, y0, x1, y1]) = <[f64; 4]>::try_from(rect) else {
+                    return Err(bad("area.rect must be [x0, y0, x1, y1]: points from the top-left of the page"));
+                };
+                let height = doc.info.pages.get(page).map_or(0.0, |p| f64::from(p.height));
+                Some(print::Area { page, rect: [x0, height - y0, x1, height - y1] })
+            }
+        };
         let subset = match a.opt_str("subset")?.unwrap_or("all") {
             "all" => Subset::All,
             "odd" => Subset::Odd,
@@ -125,7 +148,8 @@ impl Automation {
                     bad(format!("unknown paper {p:?}; choose one of {}", PAPERS.iter().map(|(name, _)| *name).collect::<Vec<_>>().join(", ")))
                 })?,
         };
-        let settings = print::Settings { pages, paper, orientation, layout, content };
+        let pages = area.map_or(pages, |area| vec![area.page]);
+        let settings = print::Settings { pages, paper, orientation, layout, content, area };
         let sizes: Vec<(f64, f64)> = self.doc(a)?.info.pages.iter().map(|p| (p.width as f64, p.height as f64)).collect();
         let sheets = print::layout(&sizes, &settings).map_err(|e| bad(e.to_string()))?.len();
         let bytes = self.session.print_pdf(id, &settings).map_err(failed)?;
