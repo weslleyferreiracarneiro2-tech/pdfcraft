@@ -471,8 +471,9 @@ fn the_snapshot_rectangle_prints_or_copies_from_its_menu() {
     h.run_steps(3);
     let (w, hgt, _) = h.state().last_snapshot.clone().expect("copied");
     assert!(w > 50 && hgt > 10, "{w} × {hgt}");
-    // A click lets go of the rectangle; Print… then has none to offer.
-    press(&mut h, at(100.0, 60.0), egui::PointerButton::Primary);
+    // A click lets go of the rectangle (above it: the copy notice sits at the bottom); Print…
+    // then has none to offer.
+    press(&mut h, at(100.0, 250.0), egui::PointerButton::Primary);
     h.run_steps(3);
     assert_eq!(h.state().views[i].snapshot_area, None);
     h.state_mut().open_print();
