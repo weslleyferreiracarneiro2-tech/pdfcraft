@@ -421,15 +421,6 @@ fn marquee_zoom_and_snapshot() {
     assert_eq!(h.state().views[i].snapshot_area, None, "the snapshot rectangle goes with its tool");
 }
 
-fn press(h: &mut Harness<'static, PdfCraftApp>, at: egui::Pos2, button: egui::PointerButton) {
-    h.hover_at(at);
-    h.run_steps(1);
-    for pressed in [true, false] {
-        h.event(egui::Event::PointerButton { pos: at, button, pressed, modifiers: Default::default() });
-    }
-    h.run_steps(3);
-}
-
 /// Acrobat's Snapshot menu: the rectangle stays selected, and right-clicking it prints just that
 /// area (the Print dialog's Selected area) or copies it.
 #[test]
@@ -448,6 +439,7 @@ fn the_snapshot_rectangle_prints_or_copies_from_its_menu() {
     assert_eq!(page, 0);
     // Right-click it ▸ Print selected area…: the dialog prints that area of page 1.
     press(&mut h, at(100.0, 160.0), egui::PointerButton::Secondary);
+    h.run_steps(3);
     h.get_by_label("Print selected area…").click();
     h.run_steps(3);
     assert!(matches!(h.state().dialog, Some(Dialog::Print)));
@@ -474,12 +466,14 @@ fn the_snapshot_rectangle_prints_or_copies_from_its_menu() {
     h.run_steps(2);
     // Copy selected area copies, whatever the preference.
     press(&mut h, at(100.0, 160.0), egui::PointerButton::Secondary);
+    h.run_steps(3);
     h.get_by_label("Copy selected area").click();
     h.run_steps(3);
     let (w, hgt, _) = h.state().last_snapshot.clone().expect("copied");
     assert!(w > 50 && hgt > 10, "{w} × {hgt}");
     // A click lets go of the rectangle; Print… then has none to offer.
     press(&mut h, at(100.0, 60.0), egui::PointerButton::Primary);
+    h.run_steps(3);
     assert_eq!(h.state().views[i].snapshot_area, None);
     h.state_mut().open_print();
     assert_eq!(h.state().print_draft.area, None);
