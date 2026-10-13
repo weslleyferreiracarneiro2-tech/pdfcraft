@@ -404,8 +404,9 @@ fn marquee_zoom_and_snapshot() {
     // Text "Page 2 pages PAGE" sits at y 150 (of 300) from x 20.
     let r = h.state().views[i].page_screen_rect(0).expect("on screen");
     let at = |x: f32, y: f32| egui::pos2(r.left() + x / 200.0 * r.width(), r.top() + (300.0 - y) / 300.0 * r.height());
-    // Snapshot of the text line.
+    // Snapshot of the text line (copied at once: USINANDO turns that off by default).
     h.state_mut().system_clipboard = false;
+    h.state_mut().snapshot_copies = true;
     assert!(h.state_mut().execute("edit.snapshot"));
     drag(&mut h, at(15.0, 175.0), at(180.0, 140.0));
     let (w, hgt, px) = h.state().last_snapshot.clone().expect("a snapshot");
